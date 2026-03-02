@@ -19,14 +19,6 @@ const AGITATION_HOLD_MS = 45_000;  // 45 seconds in AGITATION
 const STRESS_HOLD_MS = 60_000;  // 60 seconds in STRESS
 // ────────────────────────────────────────────────────────
 
-const history: number[] = [];
-
-function rollingAverage(val: number): number {
-    history.push(val);
-    if (history.length > WINDOW) history.shift();
-    return history.reduce((a, b) => a + b, 0) / history.length;
-}
-
 export const useMotionListener = () => {
     const setStressScore = useStressStore((s) => s.setStressScore);
     const setAppState = useStressStore((s) => s.setAppState);
@@ -34,6 +26,14 @@ export const useMotionListener = () => {
 
     const isDemoRef = useRef(isDemoMode);
     isDemoRef.current = isDemoMode;
+
+    // Per-instance rolling average buffer (not module-level, resets on remount)
+    const historyRef = useRef<number[]>([]);
+    const rollingAverage = (val: number): number => {
+        historyRef.current.push(val);
+        if (historyRef.current.length > WINDOW) historyRef.current.shift();
+        return historyRef.current.reduce((a, b) => a + b, 0) / historyRef.current.length;
+    };
 
     // Current locked state
     const stateRef = useRef<'CALM' | 'STRESS' | 'AGITATION'>('CALM');

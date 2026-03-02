@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import {
     StyleSheet, View, Text, Dimensions,
-    TouchableOpacity, Platform,
+    TouchableOpacity, Platform, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
@@ -15,6 +15,14 @@ import { useStressStore, AppState } from '../store/useStressStore';
 import { useMotionListener } from '../sensors/motionListener';
 import { THEME } from '../../constants/theme';
 import type { AppScreen } from '../../app/(tabs)';
+import {
+    recordSpike,
+    recordRecovery,
+    recordIgnoredPrompt,
+    evaluateIntervention,
+    getLiveInsights,
+    CoachDecision
+} from '../logic/aiCoach';
 
 const { width, height } = Dimensions.get('window');
 const ORB_SIZE = width * 0.60;
@@ -107,6 +115,28 @@ const Sidebar = ({ isOpen, onClose, onNavigate, appState, stressScore }: Sidebar
                             <View>
                                 <Text style={styles.sidebarItemTitle}>Breath Field</Text>
                                 <Text style={styles.sidebarItemSub}>Adaptive meditation session</Text>
+                            </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.sidebarItem}
+                            onPress={() => { onClose(); setTimeout(() => onNavigate('GAME'), 350); }}
+                        >
+                            <Text style={styles.sidebarItemIcon}>🫧</Text>
+                            <View>
+                                <Text style={styles.sidebarItemTitle}>Bubble Burst</Text>
+                                <Text style={styles.sidebarItemSub}>Pop bubbles to release stress</Text>
+                            </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.sidebarItem}
+                            onPress={() => { onClose(); setTimeout(() => onNavigate('COACH_CHAT'), 350); }}
+                        >
+                            <Text style={styles.sidebarItemIcon}>🤖</Text>
+                            <View>
+                                <Text style={styles.sidebarItemTitle}>AI Coach Companion</Text>
+                                <Text style={styles.sidebarItemSub}>Talk to your regulation guide</Text>
                             </View>
                         </TouchableOpacity>
 
@@ -274,6 +304,116 @@ const StressBar = ({ score }: { score: number }) => {
 };
 
 // ─────────────────────────────────────────────────────
+// AI COACH INSIGHTS CARD
+// Shows live empathy and metrics from the engine.
+// ─────────────────────────────────────────────────────
+const CoachInsightsCard = ({
+    score,
+    onChat
+}: {
+    score: number;
+    onChat: () => void;
+}) => {
+    const insights = getLiveInsights(score);
+    console.log('AI Coach Insights Rendered:', insights.status);
+
+    return (
+        <TouchableOpacity style={styles.coachCard} onPress={onChat}>
+            <LinearGradient
+                colors={['rgba(0,255,221,0.08)', 'rgba(0,100,255,0.05)']}
+                style={styles.coachCardInner}
+            >
+                <View style={styles.coachCardHeader}>
+                    <View style={styles.coachLiveRow}>
+                        <View style={styles.coachLiveDot} />
+                        <Text style={styles.coachLiveTxt}>AI COACH · {insights.status}</Text>
+                    </View>
+                    <Text style={styles.coachMetricTxt}>{insights.metric}</Text>
+                </View>
+                <Text style={styles.coachEmpathyTxt}>"{insights.empathy}"</Text>
+                <View style={styles.coachFooter}>
+                    <Text style={styles.coachChatLink}>Talk to Nerv →</Text>
+                </View>
+            </LinearGradient>
+        </TouchableOpacity>
+    );
+};
+
+// ─────────────────────────────────────────────────────
+// AUTO-TRIGGER OVERLAY
+// Fires automatically when sensors detect AGITATION.
+// 60s cooldown prevents spam.
+// ─────────────────────────────────────────────────────
+const AutoTriggerOverlay = ({
+    decision,
+    onBegin,
+    onDismiss,
+}: {
+    decision: CoachDecision;
+    onBegin: () => void;
+    onDismiss: () => void;
+}) => {
+    const slideY = useSharedValue(200);
+    const bgOp = useSharedValue(0);
+    const stressScore = useStressStore((s) => s.stressScore);
+
+    useEffect(() => {
+        bgOp.value = withTiming(1, { duration: 350 });
+        slideY.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.back(1.4)) });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }, []);
+
+    const sheetStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: slideY.value }],
+    }));
+    const dimStyle = useAnimatedStyle(() => ({ opacity: bgOp.value }));
+
+    const dismiss = () => {
+        slideY.value = withTiming(300, { duration: 300 });
+        bgOp.value = withTiming(0, { duration: 300 }, () => runOnJS(onDismiss)());
+    };
+
+    return (
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            {/* Dim scrim */}
+            <Animated.View
+                style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }, dimStyle]}
+                pointerEvents="auto"
+            >
+                <TouchableOpacity style={StyleSheet.absoluteFill} onPress={dismiss} />
+            </Animated.View>
+
+            {/* Bottom sheet */}
+            <Animated.View style={[styles.triggerSheet, sheetStyle]} pointerEvents="auto">
+                <View style={[StyleSheet.absoluteFill, { borderRadius: 24, overflow: 'hidden' }]}>
+                    <LinearGradient colors={['#1E0010', '#2E0018']} style={StyleSheet.absoluteFill} />
+                </View>
+
+                {/* Pull indicator */}
+                <View style={styles.triggerPill} />
+
+                <Text style={styles.triggerEmoji}>
+                    {decision.level === 3 ? '🚨' : decision.level === 2 ? '⚠️' : '⚡'}
+                </Text>
+                <Text style={styles.triggerTitle}>{decision.title}</Text>
+                <Text style={styles.triggerBody}>
+                    {decision.body}
+                </Text>
+
+                <View style={styles.triggerRow}>
+                    <TouchableOpacity style={styles.triggerPrimary} onPress={onBegin}>
+                        <Text style={styles.triggerPrimaryTxt}>🧘 {decision.cta}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.triggerSecondary} onPress={dismiss}>
+                        <Text style={styles.triggerSecondaryTxt}>Not now</Text>
+                    </TouchableOpacity>
+                </View>
+            </Animated.View>
+        </View>
+    );
+};
+
+// ─────────────────────────────────────────────────────
 // HOME SCREEN
 // ─────────────────────────────────────────────────────
 interface Props { onNavigate: (s: AppScreen) => void; }
@@ -287,7 +427,30 @@ export const HomeScreen = ({ onNavigate }: Props) => {
     const setAppState = useStressStore((s) => s.setAppState);
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [showOverlay, setShowOverlay] = useState(false);
+    const [coachDecision, setCoachDecision] = useState<CoachDecision | null>(null);
+
+    const lastOverlayTime = useRef<number>(0);
+    const OVERLAY_COOLDOWN_MS = 60_000; // 60s between triggers
     useMotionListener();
+
+    // ── AUTO-TRIGGER: AI Coach evaluates patterns ──
+    useEffect(() => {
+        if (appState === 'AGITATION') {
+            recordSpike(stressScore);
+        }
+
+        const decision = evaluateIntervention(stressScore);
+        if (decision.shouldIntervene) {
+            const now = Date.now();
+            if (now - lastOverlayTime.current < OVERLAY_COOLDOWN_MS) return;
+            if (showOverlay || sidebarOpen) return;
+
+            setCoachDecision(decision);
+            lastOverlayTime.current = now;
+            setShowOverlay(true);
+        }
+    }, [appState, stressScore]);
 
     const badgeColor =
         appState === 'CALM' ? THEME.colors.calm.primary :
@@ -319,90 +482,96 @@ export const HomeScreen = ({ onNavigate }: Props) => {
             <ChaosField />
 
             <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                    {/* ── HEADER ── */}
+                    <View style={styles.header}>
+                        {/* Hamburger */}
+                        <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarOpen(true)}>
+                            <View style={styles.hamburgerLine} />
+                            <View style={[styles.hamburgerLine, { width: 16 }]} />
+                            <View style={styles.hamburgerLine} />
+                        </TouchableOpacity>
 
-                {/* ── HEADER ── */}
-                <View style={styles.header}>
-                    {/* Hamburger */}
-                    <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarOpen(true)}>
-                        <View style={styles.hamburgerLine} />
-                        <View style={[styles.hamburgerLine, { width: 16 }]} />
-                        <View style={styles.hamburgerLine} />
-                    </TouchableOpacity>
+                        <View style={styles.headerCenter}>
+                            <Text style={styles.appName}>NervSync</Text>
+                            <Text style={styles.appTagline}>Nervous System Regulator</Text>
+                        </View>
 
-                    <View style={styles.headerCenter}>
-                        <Text style={styles.appName}>NervSync</Text>
-                        <Text style={styles.appTagline}>Nervous System Regulator</Text>
+                        <View style={[styles.badge, { borderColor: badgeColor }]}>
+                            <View style={[styles.badgeDot, { backgroundColor: badgeColor }]} />
+                            <Text style={styles.badgeText}>{appState}</Text>
+                        </View>
                     </View>
 
-                    <View style={[styles.badge, { borderColor: badgeColor }]}>
-                        <View style={[styles.badgeDot, { backgroundColor: badgeColor }]} />
-                        <Text style={styles.badgeText}>{appState}</Text>
-                    </View>
-                </View>
-
-                {/* ── ORB ── */}
-                <TouchableOpacity
-                    activeOpacity={1}
-                    onPress={onScreenTap}
-                    style={styles.orbTouchable}
-                >
-                    <BreathingOrb />
-                </TouchableOpacity>
-
-                {/* ── STATS ── */}
-                <View style={styles.statsSection}>
-                    <Text style={styles.statLabel}>NERVOUS LOAD</Text>
-                    <Text style={styles.statValue}>
-                        {stressScore}<Text style={styles.percent}>%</Text>
-                    </Text>
-                    <StressBar score={stressScore} />
-                    <Text style={styles.hintText}>{hint}</Text>
-                </View>
-
-                {/* ── MEDITATION CTA ── */}
-                <TouchableOpacity
-                    style={styles.meditationCTA}
-                    onPress={() => onNavigate('BASELINE_SCAN')}
-                >
-                    <LinearGradient
-                        colors={['rgba(0,200,180,0.18)', 'rgba(0,100,140,0.14)']}
-                        style={styles.meditationCTAInner}
+                    {/* ── ORB ── */}
+                    <TouchableOpacity
+                        activeOpacity={1}
+                        onPress={onScreenTap}
+                        style={styles.orbTouchable}
                     >
-                        <Text style={styles.meditationCTAIcon}>🧘</Text>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.meditationCTATitle}>Take a Meditation Session</Text>
-                            <Text style={styles.meditationCTASub}>Baseline scan → Adaptive breath field</Text>
-                        </View>
-                        <Text style={styles.meditationCTAArrow}>→</Text>
-                    </LinearGradient>
-                </TouchableOpacity>
-
-                {/* ── DEMO ── */}
-                <View style={styles.footer}>
-                    <TouchableOpacity style={styles.demoBtn} onPress={toggleDemoMode}>
-                        <Text style={styles.demoBtnText}>
-                            {isDemoMode ? '🔓  Manual Override ON' : '🔒  Live Sensor Mode'}
-                        </Text>
+                        <BreathingOrb />
                     </TouchableOpacity>
-                    {isDemoMode && (
-                        <View style={styles.demoRow}>
-                            {([
-                                { label: '😌 CALM', score: 10, state: 'CALM' },
-                                { label: '⚡ STRESS', score: 55, state: 'STRESS' },
-                                { label: '🔥 AGITATION', score: 88, state: 'AGITATION' },
-                            ] as const).map((item) => (
-                                <TouchableOpacity
-                                    key={item.state}
-                                    style={[styles.demoStateBtn, { borderColor: badgeColor }]}
-                                    onPress={() => { setStressScore(item.score); setAppState(item.state); }}
-                                >
-                                    <Text style={styles.demoStateTxt}>{item.label}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
-                </View>
 
+                    {/* ── STATS ── */}
+                    <View style={styles.statsSection}>
+                        <Text style={styles.statLabel}>NERVOUS LOAD</Text>
+                        <Text style={styles.statValue}>
+                            {stressScore}<Text style={styles.percent}>%</Text>
+                        </Text>
+                        <StressBar score={stressScore} />
+                        <Text style={styles.hintText}>{hint}</Text>
+                    </View>
+
+                    {/* ── AI COACH CARD ── */}
+                    <CoachInsightsCard
+                        score={stressScore}
+                        onChat={() => onNavigate('COACH_CHAT')}
+                    />
+
+                    {/* ── MEDITATION CTA ── */}
+                    <TouchableOpacity
+                        style={styles.meditationCTA}
+                        onPress={() => onNavigate('BASELINE_SCAN')}
+                    >
+                        <LinearGradient
+                            colors={['rgba(0,200,180,0.18)', 'rgba(0,100,140,0.14)']}
+                            style={styles.meditationCTAInner}
+                        >
+                            <Text style={styles.meditationCTAIcon}>🧘</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.meditationCTATitle}>Take a Meditation Session</Text>
+                                <Text style={styles.meditationCTASub}>Baseline scan → Adaptive breath field</Text>
+                            </View>
+                            <Text style={styles.meditationCTAArrow}>→</Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
+
+                    {/* ── DEMO ── */}
+                    <View style={styles.footer}>
+                        <TouchableOpacity style={styles.demoBtn} onPress={toggleDemoMode}>
+                            <Text style={styles.demoBtnText}>
+                                {isDemoMode ? '🔓  Manual Override ON' : '🔒  Live Sensor Mode'}
+                            </Text>
+                        </TouchableOpacity>
+                        {isDemoMode && (
+                            <View style={styles.demoRow}>
+                                {([
+                                    { label: '😌 CALM', score: 10, state: 'CALM' },
+                                    { label: '⚡ STRESS', score: 55, state: 'STRESS' },
+                                    { label: '🔥 AGITATION', score: 88, state: 'AGITATION' },
+                                ] as const).map((item) => (
+                                    <TouchableOpacity
+                                        key={item.state}
+                                        style={[styles.demoStateBtn, { borderColor: badgeColor }]}
+                                        onPress={() => { setStressScore(item.score); setAppState(item.state); }}
+                                    >
+                                        <Text style={styles.demoStateTxt}>{item.label}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+                    </View>
+                </ScrollView>
             </SafeAreaView>
 
             {/* ── SIDEBAR ── */}
@@ -413,6 +582,22 @@ export const HomeScreen = ({ onNavigate }: Props) => {
                 appState={appState}
                 stressScore={stressScore}
             />
+
+            {/* ── AUTO-TRIGGER OVERLAY ── */}
+            {showOverlay && coachDecision && (
+                <AutoTriggerOverlay
+                    decision={coachDecision}
+                    onBegin={() => {
+                        recordRecovery();
+                        setShowOverlay(false);
+                        onNavigate('BASELINE_SCAN');
+                    }}
+                    onDismiss={() => {
+                        recordIgnoredPrompt();
+                        setShowOverlay(false);
+                    }}
+                />
+            )}
         </LinearGradient>
     );
 };
@@ -422,7 +607,8 @@ export const HomeScreen = ({ onNavigate }: Props) => {
 // ─────────────────────────────────────────────────────
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    safe: { flex: 1, paddingHorizontal: 20 },
+    safe: { flex: 1 },
+    scrollContent: { paddingHorizontal: 20, paddingBottom: 24 },
 
     // Header
     header: {
@@ -464,6 +650,63 @@ const styles = StyleSheet.create({
     },
     orbLabel: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase' },
     orbSublabel: { color: 'rgba(255,255,255,0.5)', fontSize: 11, letterSpacing: 1, marginTop: 5 },
+
+    // AI Coach Card
+    coachCard: {
+        marginHorizontal: 20,
+        marginBottom: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(0,255,221,0.15)',
+        overflow: 'hidden',
+    },
+    coachCardInner: {
+        padding: 16,
+    },
+    coachCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    coachLiveRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    coachLiveDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#00FFDD',
+        marginRight: 6,
+    },
+    coachLiveTxt: {
+        color: '#00FFDD',
+        fontSize: 10,
+        fontWeight: '800',
+        letterSpacing: 1,
+    },
+    coachMetricTxt: {
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 10,
+        fontWeight: '600',
+    },
+    coachEmpathyTxt: {
+        color: '#FFF',
+        fontSize: 15,
+        fontStyle: 'italic',
+        lineHeight: 22,
+        opacity: 0.9,
+    },
+    coachFooter: {
+        marginTop: 10,
+        alignItems: 'flex-end',
+    },
+    coachChatLink: {
+        color: 'rgba(0,255,221,0.6)',
+        fontSize: 12,
+        fontWeight: '700',
+    },
 
     // Stats
     statsSection: { alignItems: 'center', paddingBottom: 8 },
@@ -568,4 +811,37 @@ const styles = StyleSheet.create({
         color: 'rgba(255,255,255,0.2)', fontSize: 11,
         textAlign: 'center', paddingBottom: 24,
     },
+
+    // Auto-trigger overlay
+    triggerSheet: {
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        borderTopLeftRadius: 24, borderTopRightRadius: 24,
+        paddingTop: 12, paddingBottom: 40, paddingHorizontal: 28,
+        overflow: 'hidden',
+        borderTopWidth: 1, borderColor: 'rgba(255,80,100,0.3)',
+    },
+    triggerPill: {
+        width: 40, height: 4, borderRadius: 2,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        alignSelf: 'center', marginBottom: 20,
+    },
+    triggerEmoji: { fontSize: 40, textAlign: 'center', marginBottom: 10 },
+    triggerTitle: { color: '#FFF', fontSize: 20, fontWeight: '900', textAlign: 'center', marginBottom: 10 },
+    triggerBody: {
+        color: 'rgba(255,255,255,0.6)', fontSize: 14, textAlign: 'center',
+        lineHeight: 22, marginBottom: 28,
+    },
+    triggerRow: { gap: 10 },
+    triggerPrimary: {
+        backgroundColor: 'rgba(255,60,100,0.25)', paddingVertical: 16,
+        borderRadius: 14, borderWidth: 1.5, borderColor: '#FF4488',
+        alignItems: 'center',
+    },
+    triggerPrimaryTxt: { color: '#FFF', fontSize: 16, fontWeight: '800' },
+    triggerSecondary: {
+        paddingVertical: 12, borderRadius: 14,
+        alignItems: 'center', borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.15)',
+    },
+    triggerSecondaryTxt: { color: 'rgba(255,255,255,0.55)', fontSize: 14 },
 });

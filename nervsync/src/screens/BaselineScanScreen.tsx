@@ -95,8 +95,7 @@ export const BaselineScanScreen = ({ onNavigate }: Props) => {
     }));
 
     const progressStyle = useAnimatedStyle(() => ({
-        opacity: progress.value,
-        transform: [{ scaleX: progress.value }],
+        width: `${progress.value * 100}%` as any,
     }));
 
     const intensityLabel = result === 'LOW' ? '😌  Calm Baseline' :

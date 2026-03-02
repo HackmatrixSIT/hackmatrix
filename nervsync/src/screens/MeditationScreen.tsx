@@ -15,6 +15,7 @@ import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
 import { useStressStore } from '../store/useStressStore';
 import type { AppScreen } from '../../app/(tabs)';
+import { recordRecovery } from '../logic/aiCoach';
 
 // Calm royalty-free ambient meditation tracks (fallback chain)
 const AMBIENT_TRACKS = [
@@ -173,7 +174,22 @@ interface Props { onNavigate: (s: AppScreen) => void; }
 
 export const MeditationScreen = ({ onNavigate }: Props) => {
     const baselineIntensity = useStressStore((s) => s.baselineIntensity);
+    const liveScore = useStressStore((s) => s.stressScore);
     const rhythm = RHYTHM[baselineIntensity];
+
+    // Keep a ref so the breath cycle worklet always reads fresh score
+    const liveScoreRef = useRef(liveScore);
+    liveScoreRef.current = liveScore;
+
+    // Dynamic timing: each cycle recalculates from live score
+    // Higher stress → longer exhale (forces them to slow down)
+    const getDynamicRhythm = useCallback(() => {
+        const s = liveScoreRef.current;
+        if (s >= 75) return { inhale: 4000, exhale: 7000 }; // High: breathe them slow
+        if (s >= 50) return { inhale: 3500, exhale: 5500 }; // Moderate
+        if (s >= 25) return { inhale: 3000, exhale: 4500 }; // Calming
+        return { inhale: rhythm.inhale, exhale: rhythm.exhale }; // Calm: use baseline
+    }, [rhythm]);
 
     const [phase, setPhase] = useState<'INHALE' | 'EXHALE'>('INHALE');
     const [sessionSeconds, setSessionSeconds] = useState(0);
@@ -195,17 +211,18 @@ export const MeditationScreen = ({ onNavigate }: Props) => {
         bgOpacity.value = withTiming(1, { duration: 800 });
     }, []);
 
-    // Breath cycle
+    // Breath cycle — adapts timing EVERY cycle from live score
     const startBreath = useCallback(() => {
         const cycle = () => {
+            const { inhale, exhale } = getDynamicRhythm();
             setPhase('INHALE');
             breathScale.value = withTiming(1.35, {
-                duration: rhythm.inhale,
+                duration: inhale,
                 easing: Easing.inOut(Easing.sin),
             }, () => {
                 runOnJS(setPhase)('EXHALE');
                 breathScale.value = withTiming(0.82, {
-                    duration: rhythm.exhale,
+                    duration: exhale,
                     easing: Easing.inOut(Easing.sin),
                 }, () => {
                     runOnJS(cycle)();
@@ -213,27 +230,30 @@ export const MeditationScreen = ({ onNavigate }: Props) => {
             });
         };
         cycle();
-    }, [rhythm]);
+    }, [getDynamicRhythm]);
 
     useEffect(() => {
         startBreath();
+        recordRecovery();
     }, []);
 
-    // Haptic rhythm
+    // Haptic rhythm — also reads live score for intensity
     useEffect(() => {
-        const style = baselineIntensity === 'LOW'
-            ? Haptics.ImpactFeedbackStyle.Light
-            : baselineIntensity === 'MODERATE'
-                ? Haptics.ImpactFeedbackStyle.Medium
-                : Haptics.ImpactFeedbackStyle.Heavy;
+        const s = liveScoreRef.current;
+        const hapticStyle =
+            s >= 60 ? Haptics.ImpactFeedbackStyle.Heavy :
+                s >= 30 ? Haptics.ImpactFeedbackStyle.Medium :
+                    Haptics.ImpactFeedbackStyle.Light;
+        const { inhale, exhale } = getDynamicRhythm();
 
         const interval = setInterval(() => {
-            Haptics.impactAsync(style);
-        }, phase === 'INHALE' ? rhythm.inhale : rhythm.exhale);
+            Haptics.impactAsync(hapticStyle);
+        }, phase === 'INHALE' ? inhale : exhale);
 
-        Haptics.impactAsync(style);
+        Haptics.impactAsync(hapticStyle);
         return () => clearInterval(interval);
-    }, [phase, baselineIntensity]);
+    }, [phase]);
+
 
     // Session timer
     useEffect(() => {
