@@ -6,16 +6,17 @@ export class StressEngine {
 
     /**
      * Calculates Normalized Stress Score (0-100)
-     * Formula: (movementScore * 0.5) + (tapScore * 0.3) + (gestureScore * 0.2)
+     * Updated Formula: (movementScore * 0.4) + (tapScore * 0.2) + (gestureScore * 0.2) + (emotionScore * 0.2)
      */
     public static calculate(
         movementIntensity: number,
         tapFrequency: number,
-        gestureVelocity: number
+        gestureVelocity: number,
+        emotionScore: number = 0
     ): number {
         // Basic normalization for movement intensity (expecting 0 to ~2-3G as raw input)
-        // Map movementIntensity to 0-100
-        const mScore = Math.min(100, movementIntensity * 33);
+        // Map movementIntensity to 0-100 (Increased multiplier to 250 for high sensitivity)
+        const mScore = Math.min(100, movementIntensity * 250);
 
         // Tap frequency (0 to 10 taps/sec)
         const tScore = Math.min(100, tapFrequency * 10);
@@ -23,9 +24,15 @@ export class StressEngine {
         // Gesture velocity (normalized 0-100)
         const gScore = Math.min(100, gestureVelocity);
 
-        const finalScore = (mScore * 0.5) + (tScore * 0.3) + (gScore * 0.2);
+        // emotionScore is already 0-100 from MLProcessor
 
-        return Math.round(finalScore);
+        const finalScore = Math.max(0,
+            (mScore * 0.7) +
+            (emotionScore * 0.2) +
+            ((tScore + gScore) / 2 * 0.1)
+        );
+
+        return Math.round(Math.min(100, finalScore));
     }
 
     /**
