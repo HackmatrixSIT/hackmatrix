@@ -17,11 +17,8 @@ import { useStressStore } from '../store/useStressStore';
 import type { AppScreen } from '../../app/(tabs)';
 import { recordRecovery } from '../logic/aiCoach';
 
-// Calm royalty-free ambient meditation tracks (fallback chain)
-const AMBIENT_TRACKS = [
-    'https://cdn.pixabay.com/audio/2024/01/10/audio_7b86a36ebb.mp3',  // Calm meditation
-    'https://cdn.pixabay.com/audio/2022/03/15/audio_1ecee98b89.mp3',  // Ambient drone
-];
+// Local calm meditation audio (bundled asset — works offline)
+const CALM_MUSIC = require('../../assets/audio/calm_music.mp3');
 
 // Volume per intensity level
 const INTENSITY_VOLUME: Record<string, number> = {
@@ -46,7 +43,7 @@ function useAmbientAudio(intensity: string, isMuted: boolean) {
                 });
 
                 const { sound } = await Audio.Sound.createAsync(
-                    { uri: AMBIENT_TRACKS[0] },
+                    CALM_MUSIC,
                     { shouldPlay: !isMuted, isLooping: true, volume: 0 }
                 );
 
