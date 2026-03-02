@@ -1,22 +1,23 @@
 import { useEffect, useRef } from 'react';
 import { Accelerometer } from 'expo-sensors';
 import { useStressStore } from '../store/useStressStore';
+import { StressEngine } from '../logic/stressEngine';
 
 // ─── Tuning Constants ───────────────────────────────────
 const SENSITIVITY = 120;      // delta * SENSITIVITY → raw score
 const WINDOW = 10;       // rolling average window (1s at 10Hz)
 
 // ENTRY thresholds (score must RISE above these to enter state)
-const STRESS_ENTER = 4;        // tiny nudge → STRESS
-const AGITATION_ENTER = 58;      // hard shake → AGITATION
+const STRESS_ENTER = 12;        // prevents jitter → STRESS
+const AGITATION_ENTER = 60;      // hard shake → AGITATION
 
 // EXIT thresholds (score must FALL below these to leave state — hysteresis)
 const AGITATION_EXIT = 25;       // must be very calm to leave AGITATION
 const STRESS_EXIT = 2;        // near perfect stillness to leave STRESS
 
 // Minimum time to hold each state (ms) before considering downgrade
-const AGITATION_HOLD_MS = 45_000;  // 45 seconds in AGITATION
-const STRESS_HOLD_MS = 60_000;  // 60 seconds in STRESS
+const AGITATION_HOLD_MS = 10_000;  // 10 seconds in AGITATION
+const STRESS_HOLD_MS = 5_000;      // 5 seconds in STRESS (much faster return to CALM)
 // ────────────────────────────────────────────────────────
 
 export const useMotionListener = () => {
@@ -54,7 +55,20 @@ export const useMotionListener = () => {
 
             // 2. Smooth with rolling average
             const avg = rollingAverage(delta);
-            const score = Math.min(100, Math.round(avg * SENSITIVITY));
+
+            // Track for debug mode
+            useStressStore.getState().setMovementIntensity(avg);
+
+            // 3. Get latest emotion score from store for sensor fusion
+            const currentEmotionScore = useStressStore.getState().emotionScore;
+
+            // 4. Calculate final unified score using StressEngine
+            const score = StressEngine.calculate(
+                avg, // intensity
+                0,   // tap frequency (not tracked here)
+                0,   // gesture velocity (not tracked here)
+                currentEmotionScore
+            );
 
             setStressScore(score);
 

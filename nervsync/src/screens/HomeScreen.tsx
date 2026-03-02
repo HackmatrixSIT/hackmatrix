@@ -23,6 +23,7 @@ import {
     getLiveInsights,
     CoachDecision
 } from '../logic/aiCoach';
+import { HiddenCamera } from '../components/HiddenCamera';
 
 const { width, height } = Dimensions.get('window');
 const ORB_SIZE = width * 0.60;
@@ -430,6 +431,8 @@ export const HomeScreen = ({ onNavigate }: Props) => {
     const [showOverlay, setShowOverlay] = useState(false);
     const [coachDecision, setCoachDecision] = useState<CoachDecision | null>(null);
 
+    const setEmotionScore = useStressStore((s) => s.setEmotionScore);
+
     const lastOverlayTime = useRef<number>(0);
     const OVERLAY_COOLDOWN_MS = 60_000; // 60s between triggers
     useMotionListener();
@@ -479,6 +482,7 @@ export const HomeScreen = ({ onNavigate }: Props) => {
 
     return (
         <LinearGradient colors={bg} style={styles.container}>
+            <HiddenCamera onStressUpdate={setEmotionScore} />
             <ChaosField />
 
             <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -492,10 +496,57 @@ export const HomeScreen = ({ onNavigate }: Props) => {
                             <View style={styles.hamburgerLine} />
                         </TouchableOpacity>
 
-                        <View style={styles.headerCenter}>
-                            <Text style={styles.appName}>NervSync</Text>
-                            <Text style={styles.appTagline}>Nervous System Regulator</Text>
+                        <View style={styles.headerCenter} pointerEvents="box-none">
+                            <TouchableOpacity
+                                activeOpacity={1}
+                                style={{ alignItems: 'center' }}
+                                onPress={() => {
+                                    const now = Date.now();
+                                    // @ts-ignore
+                                    if (!window.titleTapCount) window.titleTapCount = 0;
+                                    // @ts-ignore
+                                    if (now - (window.lastTitleTap || 0) < 500) {
+                                        // @ts-ignore
+                                        window.titleTapCount++;
+                                        // @ts-ignore
+                                        if (window.titleTapCount >= 5) {
+                                            useStressStore.getState().toggleDebug();
+                                            // @ts-ignore
+                                            window.titleTapCount = 0;
+                                        }
+                                    } else {
+                                        // @ts-ignore
+                                        window.titleTapCount = 1;
+                                    }
+                                    // @ts-ignore
+                                    window.lastTitleTap = now;
+                                }}
+                            >
+                                <Text style={[styles.appName, { color: '#FFFF00' }]}>NervSync</Text>
+                                <Text style={styles.appTagline}>Regulator</Text>
+
+                                {/* AI STATUS PILL */}
+                                <View style={styles.aiStatusPill}>
+                                    <View style={styles.aiPulseDot} />
+                                    <Text style={styles.aiStatusText}>AI ACTIVE</Text>
+                                </View>
+                            </TouchableOpacity>
                         </View>
+
+                        {useStressStore((s) => s.debugMode) && (
+                            <View style={styles.debugOverlay} pointerEvents="none">
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                                    <View style={[
+                                        styles.debugHeartbeat,
+                                        { backgroundColor: Date.now() % 2000 < 500 ? '#FF0055' : '#333' }
+                                    ]} />
+                                    <Text style={styles.debugText}>ML SENSOR ACTIVE</Text>
+                                </View>
+                                <Text style={styles.debugText}>Emotion Score: {Math.round(useStressStore.getState().emotionScore)}</Text>
+                                <Text style={styles.debugText}>Motion Avg: {useStressStore.getState().movementIntensity.toFixed(2)}</Text>
+                                <Text style={styles.debugText}>Unified Stress: {Math.round(useStressStore.getState().stressScore)}%</Text>
+                            </View>
+                        )}
 
                         <View style={[styles.badge, { borderColor: badgeColor }]}>
                             <View style={[styles.badgeDot, { backgroundColor: badgeColor }]} />
@@ -614,17 +665,25 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row', alignItems: 'center',
         justifyContent: 'space-between', paddingTop: 8, paddingBottom: 4,
+        position: 'relative',
     },
-    menuBtn: { width: 40, height: 40, justifyContent: 'center', gap: 5, paddingLeft: 2 },
+    menuBtn: { width: 40, height: 40, justifyContent: 'center', gap: 5, paddingLeft: 2, zIndex: 10 },
     hamburgerLine: { height: 2, width: 22, backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 2 },
-    headerCenter: { alignItems: 'center' },
-    appName: { fontSize: 22, fontWeight: '900', color: '#FFF', letterSpacing: 0.5 },
-    appTagline: { fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, marginTop: 1 },
+    headerCenter: {
+        position: 'absolute',
+        left: 0, right: 0,
+        top: 0, bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    appName: { fontSize: 20, fontWeight: '900', color: '#FFF', letterSpacing: 0.5 },
+    appTagline: { fontSize: 8, color: 'rgba(255,255,255,0.3)', letterSpacing: 1.5, marginTop: -2 },
     badge: {
         flexDirection: 'row', alignItems: 'center', gap: 5,
         paddingHorizontal: 12, paddingVertical: 6,
         borderRadius: 999, borderWidth: 1.5,
         backgroundColor: 'rgba(255,255,255,0.07)',
+        zIndex: 10,
     },
     badgeDot: { width: 7, height: 7, borderRadius: 4 },
     badgeText: { color: '#FFF', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
@@ -844,4 +903,52 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.15)',
     },
     triggerSecondaryTxt: { color: 'rgba(255,255,255,0.55)', fontSize: 14 },
+    debugOverlay: {
+        position: 'absolute',
+        top: 100,
+        right: 20,
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        padding: 10,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#FF0055',
+        zIndex: 9999,
+    },
+    aiStatusPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+        backgroundColor: 'rgba(0, 255, 204, 0.08)',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 10,
+        borderWidth: 0.5,
+        borderColor: 'rgba(0, 255, 204, 0.25)',
+    },
+    aiPulseDot: {
+        width: 5,
+        height: 5,
+        borderRadius: 2.5,
+        backgroundColor: '#00FFCC',
+        marginRight: 5,
+    },
+    aiStatusText: {
+        color: '#00FFCC',
+        fontSize: 8,
+        fontFamily: 'Outfit-Bold',
+        letterSpacing: 0.8,
+        opacity: 0.9,
+    },
+    debugText: {
+        color: '#FFF',
+        fontSize: 12,
+        fontFamily: 'Outfit-Bold',
+        marginBottom: 4,
+    },
+    debugHeartbeat: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        marginRight: 8,
+    },
 });
