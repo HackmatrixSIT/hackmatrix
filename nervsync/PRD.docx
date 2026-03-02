@@ -1,0 +1,200 @@
+Product Name
+NervSync — A Frictionless Nervous System Regulator
+________________________________________
+1. Problem Statement
+Traditional mental health applications require high cognitive effort (typing, reflection, form filling).
+When a user is anxious or cognitively overloaded, they are least capable of structured input.
+There is a need for:
+A zero-friction micro-intervention that detects stress passively and regulates the nervous system through embodied interaction instead of cognitive engagement.
+________________________________________
+2. Vision
+Create a bio-reactive interface that:
+•	Detects agitation using device sensors
+•	Adapts the UI automatically
+•	Induces calm using motor rhythm synchronization
+The phone becomes a nervous system mirror, not a diary.
+________________________________________
+3. Target Audience
+Primary:
+•	Students experiencing acute stress
+•	Hackathon/placement anxiety
+•	Exam pressure
+Secondary:
+•	Urban young adults with high screen dependency
+•	Individuals with mild panic episodes
+________________________________________
+4. Core Innovation
+Combines:
+Wildcard 1 – Sensor Integration
+Using:
+•	Accelerometer
+•	Touch velocity behavior
+•	Tap frequency
+Wildcard 2 – Alternative UI
+Interaction through:
+•	Gravity-based breathing orb
+•	Swipe-to-dissolve chaos field
+•	Haptic rhythm pacing
+No typing. No forms. No surveys.
+________________________________________
+5. User Experience Flow
+5.1 Passive Monitoring (Background State Capture)
+System monitors:
+•	Sudden repetitive phone movement
+•	Shake intensity
+•	Rapid tap bursts
+•	Touch velocity inconsistencies
+________________________________________
+5.2 State Detection Logic
+State Machine:
+•	Calm
+•	Mild Stress
+•	High Agitation
+Trigger Conditions Example:
+If:
+•	Movement intensity > threshold
+•	Tap speed irregularity > baseline
+Then:
+→ Move to Mild Stress
+If:
+•	Continuous high acceleration spikes
+Then:
+→ High Agitation
+________________________________________
+5.3 Intervention Trigger
+When stress state detected:
+•	UI transitions automatically
+•	Colors soften
+•	Animations slow
+•	Haptics begin guided pacing
+No notification needed.
+________________________________________
+6. Core Features (MVP Scope)
+Feature 1: Sensor Monitoring Engine
+Description:
+Continuously gathers accelerometer and gesture data.
+Requirement:
+•	Process 60Hz accelerometer data
+•	Calculate delta movement over 3-second windows
+•	Compute tap speed per 5 seconds
+Output:
+Stress score (0–100)
+________________________________________
+Feature 2: Nervous System State Engine
+Description:
+Rule-based classification engine.
+Inputs:
+•	Movement intensity
+•	Gesture velocity
+•	Tap rate
+Output:
+Current emotional state
+________________________________________
+Feature 3: Gravity Breathing Orb (Primary Intervention)
+Description:
+A floating orb moves in vertical sinusoidal motion.
+User must drag finger to follow.
+System:
+•	Slows motion gradually
+•	Matches 4-6 breathing rhythm
+•	Provides haptic pulse during inhale/exhale
+Objective:
+Force motor synchronization → regulate breath.
+________________________________________
+Feature 4: Chaos Dissolve Mode (High Stress Mode)
+Description:
+Screen fills with chaotic particles.
+User must swipe slowly to dissolve them.
+Only slow gestures reduce particle speed.
+Encourages:
+Intentional slowing of movement.
+________________________________________
+Feature 5: Adaptive UI Shift
+Depending on stress level:
+Calm:
+•	Neutral color palette
+•	Subtle animations
+Mild Stress:
+•	Slightly slower UI animations
+•	Gentle blur reduction
+High Stress:
+•	Full regulation mode
+•	Orb dominant full screen
+•	Reduced visual clutter
+________________________________________
+7. Non-Functional Requirements
+•	Response latency < 300ms
+•	Intervention trigger time < 3 seconds
+•	Must function offline
+•	No login required
+•	No stored personal data
+________________________________________
+8. Technical Stack
+Recommended:
+•	Expo + React Native
+•	expo-sensors
+•	expo-haptics
+•	react-native-reanimated
+•	react-native-gesture-handler
+Backend:
+Not required for MVP (local processing).
+________________________________________
+9. System Architecture
+Sensor Layer
+↓
+Signal Processing Layer
+↓
+State Classification Engine
+↓
+Intervention Controller
+↓
+UI + Haptic Output
+________________________________________
+10. Success Metrics
+For hackathon demo:
+•	Sensor activity visibly influences UI
+•	Real-time state switching demonstrated
+•	Breathing orb slows user interaction
+•	No text inputs used
+________________________________________
+11. Risks & Mitigation
+Risk: Sensor noise
+Mitigation: Use moving average smoothing
+Risk: Demo failure due to low movement
+Mitigation: Manual agitation simulation mode for demo
+Risk: Overengineering in 7 hours
+Mitigation: Keep state engine rule-based
+________________________________________
+12. Out of Scope (For MVP)
+•	AI stress prediction
+•	Cloud data sync
+•	Clinical diagnostics
+•	User history tracking
+________________________________________
+13. Demo Script Strategy
+During presentation:
+1.	Shake phone rapidly
+2.	Show UI transition
+3.	Open gravity orb
+4.	Demonstrate haptic inhale/exhale sync
+5.	Explain how motor rhythm entrains breath
+Do not focus on UI beauty.
+Focus on physiological loop.
+________________________________________
+14. Why This Is 60% Novel
+•	Doesn’t ask user to describe emotions
+•	Doesn’t rely on chatbot
+•	Uses behavioral biometrics
+•	Regulates body rhythm indirectly
+•	Two wildcards integrated seamlessly
+________________________________________
+15. Team Responsibility Breakdown
+Member 1:
+Sensor ingestion + stress score calculation
+Member 2:
+State engine + logic transitions
+Member 3:
+Breathing orb animation + gestures
+Member 4:
+UI polish + documentation + testing + demo narrative
+
