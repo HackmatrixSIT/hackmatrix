@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
     StyleSheet, View, Text, TextInput,
     FlatList, TouchableOpacity, KeyboardAvoidingView,
-    Platform, Dimensions,
+    Platform, Dimensions, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useStressStore } from '../store/useStressStore';
-import { getLiveInsights, getCoachPersonality } from '../logic/aiCoach';
+import { getLiveInsights, getCoachPersonality, generateAIReply } from '../logic/aiCoach';
+import type { ChatMessage } from '../logic/aiCoach';
 import type { AppScreen } from '../../app/(tabs)';
 
 const { width } = Dimensions.get('window');
@@ -22,9 +23,11 @@ interface Message {
 export const CoachChatScreen = ({ onNavigate }: { onNavigate: (s: AppScreen) => void }) => {
     const [input, setInput] = useState('');
     const [messages, setMessages] = useState<Message[]>([]);
+    const [isThinking, setIsThinking] = useState(false);
     const stressScore = useStressStore((s) => s.stressScore);
     const personality = getCoachPersonality();
     const flatListRef = useRef<FlatList>(null);
+    const chatHistoryRef = useRef<ChatMessage[]>([]);
 
     // Initial greeting based on current state
     useEffect(() => {
@@ -38,46 +41,57 @@ export const CoachChatScreen = ({ onNavigate }: { onNavigate: (s: AppScreen) => 
         setMessages([greeting]);
     }, []);
 
-    const handleSend = () => {
-        if (!input.trim()) return;
+    const handleSend = async () => {
+        const trimmed = input.trim();
+        if (!trimmed || isThinking) return;
 
         const userMsg: Message = {
             id: Date.now().toString(),
-            text: input,
+            text: trimmed,
             sender: 'USER',
             timestamp: Date.now(),
         };
         setMessages((prev) => [...prev, userMsg]);
         setInput('');
+        setIsThinking(true);
 
-        // Simulate AI thinking and replying
-        setTimeout(() => {
-            generateReply(input);
-        }, 1000);
-    };
+        try {
+            const reply = await generateAIReply(
+                chatHistoryRef.current,
+                trimmed,
+                stressScore,
+            );
 
-    const generateReply = (userText: string) => {
-        const lower = userText.toLowerCase();
-        const insights = getLiveInsights(stressScore);
-        let reply = "";
+            // Update conversation history for context continuity
+            chatHistoryRef.current = [
+                ...chatHistoryRef.current,
+                { role: 'user', text: trimmed },
+                { role: 'model', text: reply },
+            ];
 
-        if (lower.includes('lonely') || lower.includes('sad') || lower.includes('alone')) {
-            reply = "I'm right here. Even though I'm a system, I'm tuned specifically to you. What's on your mind?";
-        } else if (lower.includes('stress') || lower.includes('anxious') || lower.includes('worried')) {
-            reply = `I can feel the load is at ${stressScore}%. Let's try to bring that down. Want to start a quick breathing session?`;
-        } else if (lower.includes('thank') || lower.includes('thanks')) {
-            reply = "Always. My only job is to watch your back.";
-        } else {
-            reply = "I understand. I'm monitoring your patterns to make sure you stay balanced. Tell me more about how you're feeling.";
+            // Keep history manageable (last 20 turns)
+            if (chatHistoryRef.current.length > 40) {
+                chatHistoryRef.current = chatHistoryRef.current.slice(-40);
+            }
+
+            const aiMsg: Message = {
+                id: (Date.now() + 1).toString(),
+                text: reply,
+                sender: 'COACH',
+                timestamp: Date.now(),
+            };
+            setMessages((prev) => [...prev, aiMsg]);
+        } catch (err) {
+            const errorMsg: Message = {
+                id: (Date.now() + 1).toString(),
+                text: "I'm having trouble connecting right now. But I'm still here — tell me what's on your mind.",
+                sender: 'COACH',
+                timestamp: Date.now(),
+            };
+            setMessages((prev) => [...prev, errorMsg]);
+        } finally {
+            setIsThinking(false);
         }
-
-        const aiMsg: Message = {
-            id: (Date.now() + 1).toString(),
-            text: reply,
-            sender: 'COACH',
-            timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, aiMsg]);
     };
 
     const renderMessage = ({ item }: { item: Message }) => (
@@ -105,8 +119,10 @@ export const CoachChatScreen = ({ onNavigate }: { onNavigate: (s: AppScreen) => 
                     <View style={styles.headerTitleArea}>
                         <Text style={styles.title}>{personality.name}</Text>
                         <View style={styles.statusRow}>
-                            <View style={styles.statusDot} />
-                            <Text style={styles.statusText}>{getLiveInsights(stressScore).status}</Text>
+                            <View style={[styles.statusDot, isThinking && styles.statusDotThinking]} />
+                            <Text style={styles.statusText}>
+                                {isThinking ? 'Thinking...' : getLiveInsights(stressScore).status}
+                            </Text>
                         </View>
                     </View>
                     <View style={{ width: 40 }} />
@@ -120,6 +136,16 @@ export const CoachChatScreen = ({ onNavigate }: { onNavigate: (s: AppScreen) => 
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={styles.chatList}
                     onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+                    ListFooterComponent={
+                        isThinking ? (
+                            <View style={[styles.msgWrapper, styles.coachWrapper]}>
+                                <View style={[styles.msgBubble, styles.coachBubble, styles.thinkingBubble]}>
+                                    <ActivityIndicator size="small" color="#00FFDD" />
+                                    <Text style={styles.thinkingText}>Nerv is thinking…</Text>
+                                </View>
+                            </View>
+                        ) : null
+                    }
                 />
 
                 {/* Input Area */}
@@ -135,8 +161,13 @@ export const CoachChatScreen = ({ onNavigate }: { onNavigate: (s: AppScreen) => 
                             value={input}
                             onChangeText={setInput}
                             multiline
+                            editable={!isThinking}
                         />
-                        <TouchableOpacity onPress={handleSend} style={styles.sendBtn}>
+                        <TouchableOpacity
+                            onPress={handleSend}
+                            style={[styles.sendBtn, isThinking && styles.sendBtnDisabled]}
+                            disabled={isThinking}
+                        >
                             <Text style={styles.sendIcon}>🏹</Text>
                         </TouchableOpacity>
                     </View>
@@ -160,6 +191,7 @@ const styles = StyleSheet.create({
     title: { color: '#FFF', fontSize: 20, fontWeight: '800' },
     statusRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
     statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#00FFDD', marginRight: 6 },
+    statusDotThinking: { backgroundColor: '#FFD700' },
     statusText: { color: 'rgba(255,255,255,0.6)', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 },
 
     chatList: { padding: 20, paddingBottom: 40 },
@@ -184,6 +216,17 @@ const styles = StyleSheet.create({
     },
     msgText: { color: '#FFF', fontSize: 15, lineHeight: 22 },
 
+    thinkingBubble: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    thinkingText: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 13,
+        fontStyle: 'italic',
+    },
+
     inputContainer: {
         flexDirection: 'row', alignItems: 'center',
         padding: 15, paddingTop: 10,
@@ -200,5 +243,9 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,255,221,0.2)',
         alignItems: 'center', justifyContent: 'center', marginLeft: 10
     },
+    sendBtnDisabled: {
+        opacity: 0.4,
+    },
     sendIcon: { fontSize: 22 }
 });
+

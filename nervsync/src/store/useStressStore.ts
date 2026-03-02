@@ -8,11 +8,13 @@ interface StressState {
   appState: AppState;
   isDemoMode: boolean;
   baselineIntensity: StressIntensity; // determined by 10-sec scan
+  focusShieldEnabled: boolean;        // simplified UI mode
 
   setStressScore: (score: number) => void;
   setAppState: (state: AppState) => void;
   toggleDemoMode: () => void;
   setBaselineIntensity: (i: StressIntensity) => void;
+  setFocusShield: (enabled: boolean) => void;
 }
 
 export const useStressStore = create<StressState>((set) => ({
@@ -20,10 +22,13 @@ export const useStressStore = create<StressState>((set) => ({
   appState: 'CALM',
   isDemoMode: false,
   baselineIntensity: 'LOW',
+  focusShieldEnabled: false,
 
   setStressScore: (score) =>
     set({ stressScore: Math.min(100, Math.max(0, Math.round(score))) }),
   setAppState: (appState) => set({ appState }),
   toggleDemoMode: () => set((s) => ({ isDemoMode: !s.isDemoMode })),
   setBaselineIntensity: (baselineIntensity) => set({ baselineIntensity }),
+  setFocusShield: (focusShieldEnabled) => set({ focusShieldEnabled }),
 }));
+
